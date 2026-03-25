@@ -3,48 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Banket AI Sniper</title>
+    <title>Medet AI Sniper</title>
     <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        body { margin: 0; background: #000; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
         
-        #container { position: relative; width: 95vw; height: 75vh; border-radius: 10px; overflow: hidden; border: 4px solid #333; background: #000; }
+        #container { position: relative; width: 95vw; height: 70vh; border-radius: 20px; overflow: hidden; box-shadow: 0 0 40px rgba(255, 215, 0, 0.2); border: 4px solid #333; }
         
-        video { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; transition: opacity 0.3s; }
         
         /* Слой для стоп-кадра с зумом */
-        #photoCanvas { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; opacity: 0; transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s; }
+        #photoCanvas { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; opacity: 0; transition: transform 1s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s; }
         
-        /* Эффект при выборе */
-        #container.zoomed #photoCanvas { opacity: 1; transform: scale(7) !important; }
-        #container.zoomed { border-color: #00fbff; box-shadow: 0 0 50px #00fbff; }
+        /* Активация зума */
+        #container.zoomed #photoCanvas { opacity: 1; transform: scale(8) !important; } /* Сильный зум scale(8) */
+        #container.zoomed video { opacity: 0; }
+        #container.zoomed { border-color: gold; box-shadow: 0 0 50px gold; }
 
-        .controls { margin-top: 20px; display: flex; gap: 15px; z-index: 10; }
+        .controls { margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; z-index: 10; }
         
-        button { padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; border: none; border-radius: 50px; text-transform: uppercase; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        button { padding: 15px 30px; font-size: 1.1rem; font-weight: bold; cursor: pointer; border: none; border-radius: 50px; text-transform: uppercase; transition: 0.3s; }
         
-        #btn-pick { background: linear-gradient(45deg, #00fbff, #007bff); color: #000; }
-        #btn-pick:disabled { background: #333; color: #777; cursor: not-allowed; }
+        #btn-pick { background: gold; color: #000; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4); }
+        #btn-pick:hover:not(:disabled) { background: #ffd700cc; transform: scale(1.05); }
         
-        #btn-switch { background: #222; color: #fff; border: 1px solid #444; }
+        #btn-switch { background: #222; color: white; border: 1px solid #444; }
 
-        #status { margin-bottom: 10px; font-size: 1rem; color: #00fbff; text-shadow: 0 0 10px #00fbff; }
-        .counter { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 50px; font-size: 0.9rem; border: 2px solid #00fbff; z-index: 5; }
+        button:disabled { background: #444 !important; color: #777; cursor: not-allowed; }
+        
+        #status { margin-bottom: 15px; font-size: 1.1rem; color: #ffd700; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 5px gold; }
+        
+        .counter { position: absolute; top: 15px; right: 20px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; font-size: 0.9rem; border: 1px solid gold; z-index: 5; color: gold; }
+
+        /* --- НОВОЕ: СТИЛИ ДЛЯ ИМЕНИ --- */
+        #owner-name { position: absolute; top: 15px; left: 20px; z-index: 5; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; /* Золотистый цвет, не слишком яркий */ color: #cda434; /* Тень для четкости чтения */ text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
     </style>
 </head>
 <body>
 
-    <div id="status">ПОДГОТОВКА ИИ...</div>
+    <div id="status">ЗАГРУЗКА ИИ...</div>
     
     <div id="container">
+        <div id="owner-name">MEDET MUHAMEDZHANOV</div>
+        
         <video id="video" autoplay muted playsinline></video>
         <canvas id="photoCanvas"></canvas>
-        <div class="counter">ГОСТЕЙ В КАДРЕ: <span id="count">0</span></div>
+        <div class="counter">ГОСТЕЙ: <span id="count">0</span></div>
     </div>
 
     <div class="controls">
-        <button id="btn-switch" onclick="toggleCamera()">КАМЕРА</button>
-        <button id="btn-pick" disabled onclick="pickRandom()">ВЫБРАТЬ СЧАСТЛИВЧИКА</button>
+        <button id="btn-switch" onclick="toggleCamera()">🔄 КАМЕРА</button>
+        <button id="btn-pick" disabled onclick="pickRandom()">🎯 ВЫБРАТЬ ОДНОГО</button>
     </div>
 
     <script>
@@ -62,7 +71,7 @@
         async function init() {
             const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
             try {
-                // Модель SSDMobilenet — лучшая для распознавания людей на банкетах (даже со спины)
+                // Загружаем SSD Mobilenet для банкетных условий (много людей)
                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
                 status.innerText = "ИИ ГОТОВ К БАНКЕТУ";
                 startStream();
@@ -84,9 +93,7 @@
                     btnPick.disabled = false;
                     runAI();
                 };
-            } catch (err) {
-                status.innerText = "ПРОВЕРЬТЕ ДОСТУП К КАМЕРЕ";
-            }
+            } catch (err) { status.innerText = "ДОСТУП ОТКЛОНЕН"; }
         }
 
         function toggleCamera() {
@@ -97,23 +104,19 @@
         async function runAI() {
             setInterval(async () => {
                 if (!isLock && video.readyState === 4) {
-                    // Ищем людей. Порог 0.4 позволяет видеть тех, кто не смотрит в камеру
-                    detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }));
+                    detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.45 }));
                     countSpan.innerText = detections.length;
                 }
             }, 500);
         }
 
         function pickRandom() {
-            if (detections.length === 0) {
-                status.innerText = "НИКОГО НЕ ВИЖУ";
-                return;
-            }
+            if (detections.length === 0) return;
 
             isLock = true;
             btnPick.disabled = true;
             
-            // Рандомный выбор одного гостя
+            // Случайный выбор
             const target = detections[Math.floor(Math.random() * detections.length)];
             const { x, y, width, height } = target.box;
 
@@ -121,7 +124,7 @@
             const ctx = photoCanvas.getContext('2d');
             ctx.drawImage(video, 0, 0, photoCanvas.width, photoCanvas.height);
 
-            // Точка зума — центр силуэта выбранного человека
+            // Центрирование зума
             const cx = ((x + width / 2) / video.videoWidth) * 100;
             const cy = ((y + height / 2) / video.videoHeight) * 100;
 
@@ -130,15 +133,15 @@
             status.innerText = "ЕСТЬ КОНТАКТ!";
             container.classList.add('zoomed');
 
-            // Показываем фото 6 секунд, потом возвращаемся к видео
+            // Возврат через 5 секунд
             setTimeout(() => {
                 container.classList.remove('zoomed');
                 setTimeout(() => {
                     isLock = false;
                     btnPick.disabled = false;
                     status.innerText = "ИИ ГОТОВ К БАНКЕТУ";
-                }, 1000);
-            }, 6000);
+                }, 800);
+            }, 5000);
         }
 
         window.onload = init;
