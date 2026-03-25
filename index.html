@@ -3,53 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Person Sniper</title>
+    <title>Banket AI Sniper</title>
     <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <style>
-        body { margin: 0; background: #080808; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        body { margin: 0; background: #000; color: white; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
         
-        #container { position: relative; width: 90vw; height: 65vh; border-radius: 20px; overflow: hidden; box-shadow: 0 0 30px rgba(0, 255, 200, 0.3); border: 2px solid #222; background: #000; }
+        #container { position: relative; width: 95vw; height: 75vh; border-radius: 10px; overflow: hidden; border: 4px solid #333; background: #000; }
         
-        /* Видео поток */
-        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; transition: opacity 0.3s; z-index: 1; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1; }
         
-        /* Холст для отображения снимка (зум) */
-        #photoCanvas { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 2; opacity: 0; pointer-events: none; transition: transform 0.9s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.5s; }
+        /* Слой для стоп-кадра с зумом */
+        #photoCanvas { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; opacity: 0; transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s; }
         
-        /* Свечение во время зума */
-        #container.zoomed { box-shadow: 0 0 50px rgba(0, 212, 255, 0.7); border-color: #00d4ff; }
-        #container.zoomed #photoCanvas { opacity: 1; transform: scale(3); } /* Зум чуть меньше, так как силуэт больше лица */
-        #container.zoomed video { opacity: 0; }
+        /* Эффект при выборе */
+        #container.zoomed #photoCanvas { opacity: 1; transform: scale(7) !important; }
+        #container.zoomed { border-color: #00fbff; box-shadow: 0 0 50px #00fbff; }
 
-        .controls { margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; z-index: 10; }
+        .controls { margin-top: 20px; display: flex; gap: 15px; z-index: 10; }
         
-        button { padding: 15px 30px; font-size: 1rem; font-weight: bold; cursor: pointer; border: none; border-radius: 12px; transition: 0.3s; text-transform: uppercase; letter-spacing: 1px;}
+        button { padding: 15px 40px; font-size: 1.2rem; font-weight: bold; cursor: pointer; border: none; border-radius: 50px; text-transform: uppercase; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         
-        #btn-pick { background: #00e5ff; color: #000; box-shadow: 0 4px 15px rgba(0, 229, 255, 0.4); }
-        #btn-pick:hover:not(:disabled) { background: #00b8cc; transform: translateY(-2px); }
+        #btn-pick { background: linear-gradient(45deg, #00fbff, #007bff); color: #000; }
+        #btn-pick:disabled { background: #333; color: #777; cursor: not-allowed; }
         
-        #btn-switch { background: #222; color: white; border: 1px solid #444; }
-        #btn-switch:hover { background: #333; }
+        #btn-switch { background: #222; color: #fff; border: 1px solid #444; }
 
-        button:disabled { background: #444 !important; cursor: not-allowed; opacity: 0.5; color: #aaa; box-shadow: none;}
-        
-        #status { margin-bottom: 15px; font-size: 1.1rem; color: #00e5ff; font-weight: bold; text-transform: uppercase;}
-        .counter { position: absolute; top: 10px; right: 15px; background: rgba(0,0,0,0.8); padding: 5px 15px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #00e5ff; z-index: 5; color: #00e5ff; font-weight: bold;}
+        #status { margin-bottom: 10px; font-size: 1rem; color: #00fbff; text-shadow: 0 0 10px #00fbff; }
+        .counter { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 50px; font-size: 0.9rem; border: 2px solid #00fbff; z-index: 5; }
     </style>
 </head>
 <body>
 
-    <div id="status">Загрузка ИИ...</div>
+    <div id="status">ПОДГОТОВКА ИИ...</div>
     
     <div id="container">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="photoCanvas"></canvas>
-        <div class="counter">Людей: <span id="count">0</span></div>
+        <div class="counter">ГОСТЕЙ В КАДРЕ: <span id="count">0</span></div>
     </div>
 
     <div class="controls">
-        <button id="btn-switch" onclick="toggleCamera()">🔄 Камера</button>
-        <button id="btn-pick" disabled onclick="pickRandom()">🎯 ЗАХВАТ СИЛУЭТА</button>
+        <button id="btn-switch" onclick="toggleCamera()">КАМЕРА</button>
+        <button id="btn-pick" disabled onclick="pickRandom()">ВЫБРАТЬ СЧАСТЛИВЧИКА</button>
     </div>
 
     <script>
@@ -62,50 +57,35 @@
         
         let detections = [];
         let currentFacingMode = "user"; 
-        let isProcessing = false;
+        let isLock = false;
 
         async function init() {
-            // Используем официальный CDN моделей
             const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-            
-            status.innerText = "Инициализация ИИ...";
-            
             try {
-                // ВАЖНО: Загружаем SSDMobileNetv1 (для силуэтов), а не TinyFaceDetector
+                // Модель SSDMobilenet — лучшая для распознавания людей на банкетах (даже со спины)
                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                status.innerText = "ИИ готов! Ищу силуэты.";
-                status.style.color = "#00e5ff";
+                status.innerText = "ИИ ГОТОВ К БАНКЕТУ";
                 startStream();
             } catch (e) {
-                console.error(e);
-                status.innerText = "Ошибка загрузки ИИ моделей.";
+                status.innerText = "ОШИБКА ЗАГРУЗКИ";
             }
         }
 
         async function startStream() {
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
-
-            const constraints = {
-                video: { 
-                    facingMode: currentFacingMode,
-                    width: { ideal: 1280 }, // Чуть выше разрешение для точности
-                    height: { ideal: 720 }
-                }
-            };
-
+            if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); }
             try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: currentFacingMode, width: 1920, height: 1080 } 
+                });
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
-                    btnPick.disabled = false;
                     photoCanvas.width = video.videoWidth;
                     photoCanvas.height = video.videoHeight;
-                    runDetection();
+                    btnPick.disabled = false;
+                    runAI();
                 };
             } catch (err) {
-                status.innerText = "Доступ к камере отклонен!";
+                status.innerText = "ПРОВЕРЬТЕ ДОСТУП К КАМЕРЕ";
             }
         }
 
@@ -114,62 +94,51 @@
             startStream();
         }
 
-        async function runDetection() {
+        async function runAI() {
             setInterval(async () => {
-                // Детекция работает только если видео готово и не идет зум
-                if (!isProcessing && video.readyState === 4) {
-                    // Используем SSDMobileNetv1 с параметрами по умолчанию
-                    // Эта модель автоматически ищет объекты, похожие на человека
-                    detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }));
-                    
+                if (!isLock && video.readyState === 4) {
+                    // Ищем людей. Порог 0.4 позволяет видеть тех, кто не смотрит в камеру
+                    detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }));
                     countSpan.innerText = detections.length;
-                    
-                    if (detections.length > 0) {
-                        status.innerText = "Вижу " + detections.length + " чел.";
-                        status.style.color = "#00e5ff";
-                    } else {
-                        status.innerText = "Сканирую силуэты...";
-                        status.style.color = "#ffc107";
-                    }
                 }
-            }, 400); // Опрос чуть реже, так как модель SSD тяжелее
+            }, 500);
         }
 
-        // --- ЛОГИКА СНИМКА И ЗУМА (на силуэт) ---
         function pickRandom() {
-            if (detections.length === 0) return;
+            if (detections.length === 0) {
+                status.innerText = "НИКОГО НЕ ВИЖУ";
+                return;
+            }
 
-            isProcessing = true;
+            isLock = true;
             btnPick.disabled = true;
-            status.innerText = "ЗАХВАТ СИЛУЭТА...";
             
-            // 1. Выбираем случайный силуэт
-            const randomIdx = Math.floor(Math.random() * detections.length);
-            const box = detections[randomIdx].box;
+            // Рандомный выбор одного гостя
+            const target = detections[Math.floor(Math.random() * detections.length)];
+            const { x, y, width, height } = target.box;
 
-            // 2. Делаем мгновенный снимок ВСЕГО кадра
+            // Мгновенный стоп-кадр
             const ctx = photoCanvas.getContext('2d');
             ctx.drawImage(video, 0, 0, photoCanvas.width, photoCanvas.height);
 
-            // 3. Расчет центра СИЛУЭТА (а не лица) для CSS-зума
-            const centerX = ((box.x + box.width / 2) / video.videoWidth) * 100;
-            const centerY = ((box.y + box.height / 2) / video.videoHeight) * 100;
+            // Точка зума — центр силуэта выбранного человека
+            const cx = ((x + width / 2) / video.videoWidth) * 100;
+            const cy = ((y + height / 2) / video.videoHeight) * 100;
 
-            // 4. Устанавливаем точку зума
-            photoCanvas.style.transformOrigin = `${centerX}% ${centerY}%`;
-
-            // 5. Включаем анимацию
+            photoCanvas.style.transformOrigin = `${cx}% ${cy}%`;
+            
+            status.innerText = "ЕСТЬ КОНТАКТ!";
             container.classList.add('zoomed');
 
-            // 6. Сброс через 4.5 секунды
+            // Показываем фото 6 секунд, потом возвращаемся к видео
             setTimeout(() => {
                 container.classList.remove('zoomed');
                 setTimeout(() => {
-                    isProcessing = false;
+                    isLock = false;
                     btnPick.disabled = false;
-                    status.innerText = "ИИ готов.";
-                }, 600);
-            }, 4500);
+                    status.innerText = "ИИ ГОТОВ К БАНКЕТУ";
+                }, 1000);
+            }, 6000);
         }
 
         window.onload = init;
