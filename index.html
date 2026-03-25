@@ -6,34 +6,33 @@
     <title>AI Face Selector Pro</title>
     <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
     <style>
-        body { margin: 0; background: #0f0f0f; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        body { margin: 0; background: #0f0f0f; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
         
-        #container { position: relative; width: 90vw; height: 60vh; border-radius: 20px; overflow: hidden; box-shadow: 0 0 30px rgba(0, 123, 255, 0.3); border: 2px solid #333; }
-        video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s cubic-bezier(0.19, 1, 0.22, 1); }
+        #container { position: relative; width: 90vw; height: 60vh; border-radius: 20px; overflow: hidden; box-shadow: 0 0 30px rgba(0, 123, 255, 0.3); border: 2px solid #333; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.8s cubic-bezier(0.19, 1, 0.22, 1); }
         
         .controls { margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
         
-        button { padding: 12px 25px; font-size: 1rem; font-weight: bold; cursor: pointer; border: none; border-radius: 12px; transition: 0.3s; text-transform: uppercase; }
+        button { padding: 15px 30px; font-size: 1rem; font-weight: bold; cursor: pointer; border: none; border-radius: 12px; transition: 0.3s; text-transform: uppercase; }
         
         #btn-pick { background: #28a745; color: white; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4); }
-        #btn-pick:hover { background: #218838; transform: translateY(-2px); }
+        #btn-pick:hover:not(:disabled) { background: #218838; transform: translateY(-2px); }
         
         #btn-switch { background: #6c757d; color: white; }
-        #btn-switch:hover { background: #5a6268; }
-
-        button:disabled { background: #444 !important; cursor: not-allowed; opacity: 0.5; box-shadow: none; }
         
-        #status { margin-bottom: 15px; font-size: 0.9rem; letter-spacing: 1px; color: #00d4ff; text-transform: uppercase; }
-        .counter { position: absolute; top: 10px; right: 15px; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; border: 1px solid #00d4ff; }
+        button:disabled { background: #444 !important; cursor: not-allowed; opacity: 0.5; }
+        
+        #status { margin-bottom: 15px; font-size: 1rem; color: #00d4ff; font-weight: bold; }
+        .counter { position: absolute; top: 10px; right: 15px; background: rgba(0,0,0,0.7); padding: 5px 15px; border-radius: 20px; font-size: 0.9rem; border: 1px solid #00d4ff; z-index: 5; }
     </style>
 </head>
 <body>
 
-    <div id="status">Инициализация ИИ...</div>
+    <div id="status">Загрузка моделей ИИ...</div>
     
     <div id="container">
         <video id="video" autoplay muted playsinline></video>
-        <div class="counter">Людей в кадре: <span id="count">0</span></div>
+        <div class="counter">Людей: <span id="count">0</span></div>
     </div>
 
     <div class="controls">
@@ -48,91 +47,112 @@
         const countSpan = document.getElementById('count');
         
         let detections = [];
-        let currentFacingMode = "user"; // По умолчанию передняя
+        let currentFacingMode = "user"; 
         let isZoomed = false;
 
-        // 1. Загрузка моделей
+        // 1. Загрузка моделей (используем надежный источник)
         async function init() {
             const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            
             try {
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                ]);
-                status.innerText = "Система готова";
+                // Загружаем только необходимые модели для скорости
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                status.innerText = "Система готова! Жду лица...";
                 startStream();
             } catch (e) {
-                status.innerText = "Ошибка загрузки моделей";
+                console.error(e);
+                status.innerText = "Ошибка загрузки ИИ. Проверь интернет.";
             }
         }
 
-        // 2. Запуск потока
+        // 2. Запуск видеопотока
         async function startStream() {
             if (video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
             }
 
             const constraints = {
-                video: { facingMode: currentFacingMode }
+                video: { 
+                    facingMode: currentFacingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
             };
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
-                btnPick.disabled = false;
-                runDetection();
+                
+                // Ждем, пока видео реально начнет воспроизводиться
+                video.onloadedmetadata = () => {
+                    btnPick.disabled = false;
+                    runDetection();
+                };
             } catch (err) {
-                status.innerText = "Доступ к камере отклонен";
+                status.innerText = "Нет доступа к камере!";
             }
         }
 
-        // 3. Переключатель камер
+        // 3. Переключение камеры
         function toggleCamera() {
             currentFacingMode = (currentFacingMode === "user") ? "environment" : "user";
-            status.innerText = "Переключение камеры...";
+            status.innerText = "Смена камеры...";
             startStream();
         }
 
-        // 4. Детекция лиц
+        // 4. Детекция лиц (оптимизировано)
         async function runDetection() {
             setInterval(async () => {
-                if (!isZoomed) { // Не считаем во время зума для стабильности
-                    detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                if (!isZoomed && video.readyState === 4) {
+                    // Используем быстрые настройки детектора
+                    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 });
+                    detections = await faceapi.detectAllFaces(video, options);
                     countSpan.innerText = detections.length;
+                    
+                    if (detections.length > 0) {
+                        status.innerText = "Вижу " + detections.length + " чел.";
+                        status.style.color = "#28a745";
+                    } else {
+                        status.innerText = "Никого не вижу...";
+                        status.style.color = "#ffc107";
+                    }
                 }
-            }, 300);
+            }, 400); // Опрашиваем чуть реже, чтобы не тормозило
         }
 
-        // 5. Рандом и Зум
+        // 5. Логика выбора и анимации
         function pickRandom() {
-            if (detections.length === 0) {
-                status.innerText = "Никого не вижу!";
-                return;
-            }
+            if (detections.length === 0) return;
 
             isZoomed = true;
             btnPick.disabled = true;
             
-            const randomPerson = detections[Math.floor(Math.random() * detections.length)];
-            const { x, y, width, height } = randomPerson.box;
+            // Выбираем случайный объект из найденных лиц
+            const randomIdx = Math.floor(Math.random() * detections.length);
+            const box = detections[randomIdx].box;
 
-            // Расчет центра для зума
-            const centerX = ((x + width / 2) / video.videoWidth) * 100;
-            const centerY = ((y + height / 2) / video.videoHeight) * 100;
+            // Расчет центральной точки для зума
+            const centerX = ((box.x + box.width / 2) / video.videoWidth) * 100;
+            const centerY = ((box.y + box.height / 2) / video.videoHeight) * 100;
 
-            status.innerText = "Выбираю...";
+            status.innerText = "ВЫБРАН СЛУЧАЙНЫЙ!";
+            status.style.color = "#00d4ff";
             
+            // Применяем плавное приближение
             video.style.transformOrigin = `${centerX}% ${centerY}%`;
-            video.style.transform = "scale(4)"; 
+            video.style.transform = "scale(3.5)"; 
 
+            // Возврат в исходное состояние через 4 секунды
             setTimeout(() => {
                 video.style.transform = "scale(1)";
                 isZoomed = false;
                 btnPick.disabled = false;
                 status.innerText = "Система готова";
-            }, 3500);
+            }, 4000);
         }
 
-        init();
+        // Запуск приложения
+        window.onload = init;
     </script>
 </body>
 </html>
